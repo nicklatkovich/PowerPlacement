@@ -6,6 +6,8 @@ using KeepCoding;
 public class PowerPlacementModule : ModuleScript {
 	public const float CELLS_INTERVAL = 0.018f;
 	public const float OBJECTS_HEIGHT = 0.002f;
+	public const float CONNECTION_WIDTH = 0.001f;
+	public const float CONNECTION_HEIGHT = 0.0015f;
 
 	public GameObject GridContainer;
 	public KMSelectable Selectable;
@@ -14,6 +16,7 @@ public class PowerPlacementModule : ModuleScript {
 	public ReceiverComponent ReceiverPrefab;
 	public EnergyCellComponent EnergyCellPrefab;
 	public ShieldComponent ShieldPrefab;
+	public ConnectionComponent ConnectionPrefab;
 
 	private CellComponent[][] _cellGrid;
 	private PowerPlacementPuzzle _puzzle;
@@ -98,11 +101,19 @@ public class PowerPlacementModule : ModuleScript {
 			obj.transform.localRotation = Quaternion.identity;
 			_objects[pos.x][pos.y] = obj;
 			UpdateColorsOnCross(pos);
+			OnObjectPlaced(pos);
+			for (int d = 0; d < 4; d++) {
+				PowerPlacementPuzzle.Cell objCell = _puzzle.GridRaycast(pos, d);
+				if (objCell == null || objCell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
+				obj.Connections[d] = CreateConnection(pos, objCell.Position, (objCell.Flags & (1 << ((d + 2) % 4))) > 0 ? Color.green : Color.red);
+			}
 			return;
 		}
 		if (cell.Type == PowerPlacementPuzzle.CellType.ENERGY) {
 			cell.Type = PowerPlacementPuzzle.CellType.SHIELD;
-			Destroy((_objects[pos.x][pos.y] as EnergyCellComponent).gameObject);
+			EnergyCellComponent energyCell = _objects[pos.x][pos.y] as EnergyCellComponent;
+			foreach (ConnectionComponent connection in energyCell.Connections.Where(c => c != null)) Destroy(connection.gameObject);
+			Destroy(energyCell.gameObject);
 			ShieldComponent obj = Instantiate(ShieldPrefab);
 			obj.transform.parent = GridContainer.transform;
 			obj.transform.localPosition = new Vector3(pos.x * CELLS_INTERVAL, OBJECTS_HEIGHT, -pos.y * CELLS_INTERVAL);
@@ -110,6 +121,7 @@ public class PowerPlacementModule : ModuleScript {
 			obj.transform.localRotation = Quaternion.identity;
 			_objects[pos.x][pos.y] = obj;
 			UpdateColorsOnCross(pos);
+			OnObjectPlaced(pos);
 			return;
 		}
 		if (cell.Type == PowerPlacementPuzzle.CellType.SHIELD) {
@@ -117,7 +129,26 @@ public class PowerPlacementModule : ModuleScript {
 			Destroy((_objects[pos.x][pos.y] as ShieldComponent).gameObject);
 			_objects[pos.x][pos.y] = null;
 			UpdateColorsOnCross(pos);
+			PowerPlacementPuzzle.Cell[] raycasts = _puzzle.MultiGridRaycast(pos);
+			for (int d = 0; d < 4; d++) {
+				if (raycasts[d] == null || raycasts[d].Type != PowerPlacementPuzzle.CellType.ENERGY) continue;
+				int aD = (d + 2) % 4;
+				PowerPlacementPuzzle.Cell aObjCell = raycasts[aD];
+				if (aObjCell == null || aObjCell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
+				EnergyCellComponent ecObj = _objects[raycasts[d].Position.x][raycasts[d].Position.y] as EnergyCellComponent;
+				ecObj.Connections[aD] = CreateConnection(raycasts[d].Position, aObjCell.Position, (aObjCell.Flags & (1 << d)) > 0 ? Color.green : Color.red);
+			}
 			return;
+		}
+	}
+
+	private void OnObjectPlaced(Vector2Int pos) {
+		for (int d = 0; d < 4; d++) {
+			PowerPlacementPuzzle.Cell rcCell = _puzzle.GridRaycast(pos, d);
+			if (rcCell == null || rcCell.Type != PowerPlacementPuzzle.CellType.ENERGY) continue;
+			EnergyCellComponent ecObj = _objects[rcCell.Position.x][rcCell.Position.y] as EnergyCellComponent;
+			ConnectionComponent conn = ecObj.Connections[(d + 2) % 4];
+			if (conn != null) Destroy(conn.gameObject);
 		}
 	}
 
@@ -150,7 +181,7 @@ public class PowerPlacementModule : ModuleScript {
 			if (cell == null || cell.Type != PowerPlacementPuzzle.CellType.ENERGY) continue;
 			PowerPlacementPuzzle.Cell aCell = raycasts[(d + 2) % 4];
 			if (aCell == null || aCell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
-			if ((aCell.Flags & (1 << ((d + 2) % 4))) > 0) return obj.Color = Color.red;
+			if ((aCell.Flags & (1 << d)) > 0) return obj.Color = Color.red;
 			successfulBlocking = true;
 		}
 		if (successfulBlocking) return obj.Color = Color.green;
@@ -169,5 +200,16 @@ public class PowerPlacementModule : ModuleScript {
 		}
 		if (raycasts.Any(cell => cell != null && cell.Type == PowerPlacementPuzzle.CellType.RECEIVER)) return obj.Color = Color.green;
 		return obj.Color = lines.All(line => line.Count(cell => cell.Type == PowerPlacementPuzzle.CellType.SHIELD) == 1) ? Color.green : Color.white;
+	}
+
+	private ConnectionComponent CreateConnection(Vector2Int from, Vector2Int to, Color color) {
+		ConnectionComponent result = Instantiate(ConnectionPrefab);
+		result.transform.parent = GridContainer.transform;
+		result.transform.localPosition = CELLS_INTERVAL * new Vector3((from.x + to.x) / 2f, 0, -(from.y + to.y) / 2f);
+		Vector2 scale = CELLS_INTERVAL * new Vector2(Mathf.Abs(from.x - to.x), Mathf.Abs(from.y - to.y)) + CONNECTION_WIDTH * Vector2.one;
+		result.transform.localScale = new Vector3(scale.x, CONNECTION_HEIGHT, scale.y);
+		result.transform.localRotation = Quaternion.identity;
+		result.Color = color;
+		return result;
 	}
 }

@@ -281,6 +281,8 @@ MonoBehaviour:
     type: 2}
   ShieldPrefab: {fileID: 114121148789695988, guid: 321805227c499704cb11f490feda23be,
     type: 2}
+  ConnectionPrefab: {fileID: 114201012033440650, guid: 9b2cbcc32352c9444898a29241f660b7,
+    type: 2}
 --- !u!114 &114438504388746054
 MonoBehaviour:
   m_ObjectHideFlags: 1
