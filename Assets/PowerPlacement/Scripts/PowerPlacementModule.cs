@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using KeepCoding;
 
@@ -12,15 +13,19 @@ public class PowerPlacementModule : ModuleScript {
 	public CellBorderComponent CellBorderPrefab;
 	public ReceiverComponent ReceiverPrefab;
 	public EnergyCellComponent EnergyCellPrefab;
+	public ShieldComponent ShieldPrefab;
 
 	private CellComponent[][] _cellGrid;
 	private PowerPlacementPuzzle _puzzle;
+	private object[][] _objects;
 
 	private void Start() {
 		_puzzle = new PowerPlacementPuzzle();
 		_cellGrid = new CellComponent[PowerPlacementPuzzle.SIZE][];
+		_objects = new object[PowerPlacementPuzzle.SIZE][];
 		InitGrid();
 		for (int x = -1; x < PowerPlacementPuzzle.SIZE; x++) {
+			if (x >= 0) _objects[x] = new object[PowerPlacementPuzzle.SIZE];
 			for (int z = -1; z < PowerPlacementPuzzle.SIZE; z++) {
 				if (x >= 0) {
 					CellBorderComponent border = CreateCellBorder(x, z + 0.5f, 90);
@@ -91,7 +96,78 @@ public class PowerPlacementModule : ModuleScript {
 			obj.transform.localPosition = new Vector3(pos.x * CELLS_INTERVAL, OBJECTS_HEIGHT, -pos.y * CELLS_INTERVAL);
 			obj.transform.localScale = Vector3.one;
 			obj.transform.localRotation = Quaternion.identity;
-			obj.Renderer.material.color = Color.green;
+			_objects[pos.x][pos.y] = obj;
+			UpdateColorsOnCross(pos);
+			return;
 		}
+		if (cell.Type == PowerPlacementPuzzle.CellType.ENERGY) {
+			cell.Type = PowerPlacementPuzzle.CellType.SHIELD;
+			Destroy((_objects[pos.x][pos.y] as EnergyCellComponent).gameObject);
+			ShieldComponent obj = Instantiate(ShieldPrefab);
+			obj.transform.parent = GridContainer.transform;
+			obj.transform.localPosition = new Vector3(pos.x * CELLS_INTERVAL, OBJECTS_HEIGHT, -pos.y * CELLS_INTERVAL);
+			obj.transform.localScale = Vector3.one;
+			obj.transform.localRotation = Quaternion.identity;
+			_objects[pos.x][pos.y] = obj;
+			UpdateColorsOnCross(pos);
+			return;
+		}
+		if (cell.Type == PowerPlacementPuzzle.CellType.SHIELD) {
+			cell.Type = PowerPlacementPuzzle.CellType.EMPTY;
+			Destroy((_objects[pos.x][pos.y] as ShieldComponent).gameObject);
+			_objects[pos.x][pos.y] = null;
+			UpdateColorsOnCross(pos);
+			return;
+		}
+	}
+
+	private void UpdateColorsOnCross(Vector2Int crossPivot) {
+		UpdateColorOnCell(crossPivot);
+		foreach (Vector2Int dd in PowerPlacementPuzzle.DD) {
+			Vector2Int p = crossPivot + dd;
+			while (PowerPlacementPuzzle.IsOnGrid(p)) {
+				UpdateColorOnCell(p);
+				p += dd;
+			}
+		}
+	}
+
+	private void UpdateColorOnCell(Vector2Int pos) {
+		PowerPlacementPuzzle.Cell cell = _puzzle.Grid[pos.x][pos.y];
+		if (cell.Type == PowerPlacementPuzzle.CellType.EMPTY) return;
+		if (cell.Type == PowerPlacementPuzzle.CellType.ENERGY) SetEnergyCellColor(pos);
+		else if (cell.Type == PowerPlacementPuzzle.CellType.SHIELD) SetShieldCellColor(pos);
+	}
+
+	private Color SetShieldCellColor(Vector2Int pos) {
+		ShieldComponent obj = _objects[pos.x][pos.y] as ShieldComponent;
+		List<PowerPlacementPuzzle.Cell>[] lines = _puzzle.GetGridCrossLines(pos);
+		if (lines.Any(line => line.Count(cell => cell.Type == PowerPlacementPuzzle.CellType.SHIELD) > 1)) return obj.Color = Color.red;
+		PowerPlacementPuzzle.Cell[] raycasts = _puzzle.MultiGridRaycast(pos);
+		bool successfulBlocking = false;
+		for (int d = 0; d < 4; d++) {
+			PowerPlacementPuzzle.Cell cell = raycasts[d];
+			if (cell == null || cell.Type != PowerPlacementPuzzle.CellType.ENERGY) continue;
+			PowerPlacementPuzzle.Cell aCell = raycasts[(d + 2) % 4];
+			if (aCell == null || aCell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
+			if ((aCell.Flags & (1 << ((d + 2) % 4))) > 0) return obj.Color = Color.red;
+			successfulBlocking = true;
+		}
+		if (successfulBlocking) return obj.Color = Color.green;
+		return obj.Color = lines.All(line => line.Count(cell => cell.Type == PowerPlacementPuzzle.CellType.ENERGY) == 1) ? Color.green : Color.white;
+	}
+
+	private Color SetEnergyCellColor(Vector2Int pos) {
+		EnergyCellComponent obj = _objects[pos.x][pos.y] as EnergyCellComponent;
+		List<PowerPlacementPuzzle.Cell>[] lines = _puzzle.GetGridCrossLines(pos);
+		if (lines.Any(line => line.Count(cell => cell.Type == PowerPlacementPuzzle.CellType.ENERGY) > 1)) return obj.Color = Color.red;
+		PowerPlacementPuzzle.Cell[] raycasts = _puzzle.MultiGridRaycast(pos);
+		for (int d = 0; d < 4; d++) {
+			PowerPlacementPuzzle.Cell cell = raycasts[d];
+			if (cell == null || cell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
+			if ((cell.Flags & (1 << ((d + 2) % 4))) == 0) return obj.Color = Color.red;
+		}
+		if (raycasts.Any(cell => cell != null && cell.Type == PowerPlacementPuzzle.CellType.RECEIVER)) return obj.Color = Color.green;
+		return obj.Color = lines.All(line => line.Count(cell => cell.Type == PowerPlacementPuzzle.CellType.SHIELD) == 1) ? Color.green : Color.white;
 	}
 }

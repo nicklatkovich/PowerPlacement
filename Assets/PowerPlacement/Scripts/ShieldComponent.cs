@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-public class EnergyCellComponent : MonoBehaviour {
+public class ShieldComponent : MonoBehaviour {
 	public Renderer Renderer;
 
 	private Color _color = Color.white;

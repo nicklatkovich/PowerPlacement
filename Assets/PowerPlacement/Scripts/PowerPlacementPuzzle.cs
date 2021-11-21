@@ -25,6 +25,37 @@ public class PowerPlacementPuzzle {
 	public Cell[][] Grid;
 	public HashSet<Cell> Receivers;
 
+	public List<Cell>[] GetGridCrossLines(Vector2Int pos) {
+		return Enumerable.Range(0, 2).Select(d => GetGridLine(pos, d)).ToArray();
+	}
+
+	public List<Cell> GetGridLine(Vector2Int pos, int d) {
+		int aD = (d + 2) % 4;
+		Vector2Int pIt = pos + DD[aD];
+		while (IsOnGrid(pIt)) pIt += DD[aD];
+		pIt += DD[d];
+		List<Cell> result = new List<Cell>();
+		while (IsOnGrid(pIt)) {
+			result.Add(Grid[pIt.x][pIt.y]);
+			pIt += DD[d];
+		}
+		return result;
+	}
+
+	public Cell[] MultiGridRaycast(Vector2Int from) {
+		return Enumerable.Range(0, 4).Select(d => GridRaycast(from, d)).ToArray();
+	}
+
+	public Cell GridRaycast(Vector2Int from, int direction) {
+		Vector2Int pIt = from + DD[direction];
+		while (IsOnGrid(pIt)) {
+			Cell cell = Grid[pIt.x][pIt.y];
+			if (cell.Type != CellType.EMPTY) return cell;
+			pIt += DD[direction];
+		}
+		return null;
+	}
+
 	public PowerPlacementPuzzle() {
 		Solution = new Cell[SIZE][];
 		InitGrid();
