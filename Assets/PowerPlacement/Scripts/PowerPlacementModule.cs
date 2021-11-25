@@ -25,10 +25,8 @@ public class PowerPlacementModule : ModuleScript {
 	private void Start() {
 		_puzzle = new PowerPlacementPuzzle();
 		_cellGrid = new CellComponent[PowerPlacementPuzzle.SIZE][];
-		_objects = new object[PowerPlacementPuzzle.SIZE][];
 		InitGrid();
 		for (int x = -1; x < PowerPlacementPuzzle.SIZE; x++) {
-			if (x >= 0) _objects[x] = new object[PowerPlacementPuzzle.SIZE];
 			for (int z = -1; z < PowerPlacementPuzzle.SIZE; z++) {
 				if (x >= 0) {
 					CellBorderComponent border = CreateCellBorder(x, z + 0.5f, 90);
@@ -46,7 +44,9 @@ public class PowerPlacementModule : ModuleScript {
 
 	private void InitGrid() {
 		List<KMSelectable> selectables = new List<KMSelectable>();
+		_objects = new object[PowerPlacementPuzzle.SIZE][];
 		for (int x = 0; x < PowerPlacementPuzzle.SIZE; x++) {
+			_objects[x] = new object[PowerPlacementPuzzle.SIZE];
 			_cellGrid[x] = new CellComponent[PowerPlacementPuzzle.SIZE];
 			for (int z = 0; z < PowerPlacementPuzzle.SIZE; z++) {
 				CellComponent cell = Instantiate(CellPrefab);
@@ -65,14 +65,15 @@ public class PowerPlacementModule : ModuleScript {
 					receiver.transform.localPosition = new Vector3(x * CELLS_INTERVAL, OBJECTS_HEIGHT, -z * CELLS_INTERVAL);
 					receiver.transform.localScale = Vector3.one;
 					receiver.transform.localRotation = Quaternion.identity;
+					receiver.Center.material.color = Color.white;
 					if (_puzzle.Solution[x][z].Flags == 0) {
-						receiver.Center.material.color = Color.green;
 						receiver.Outline.material.color = Color.green;
 					}
 					for (int d = 0; d < 4; d++) {
 						if ((_puzzle.Solution[x][z].Flags & (1 << d)) > 0) continue;
 						receiver.Sides[d].gameObject.SetActive(false);
 					}
+					_objects[x][z] = receiver;
 				}
 				_cellGrid[x][z] = cell;
 			}
@@ -168,6 +169,37 @@ public class PowerPlacementModule : ModuleScript {
 		if (cell.Type == PowerPlacementPuzzle.CellType.EMPTY) return;
 		if (cell.Type == PowerPlacementPuzzle.CellType.ENERGY) SetEnergyCellColor(pos);
 		else if (cell.Type == PowerPlacementPuzzle.CellType.SHIELD) SetShieldCellColor(pos);
+		else if (cell.Type == PowerPlacementPuzzle.CellType.RECEIVER) SetReceiverColor(pos);
+	}
+
+	private Color SetReceiverColor(Vector2Int pos) {
+		PowerPlacementPuzzle.Cell cell = _puzzle.Grid[pos.x][pos.y];
+		ReceiverComponent obj = _objects[pos.x][pos.y] as ReceiverComponent;
+		bool hasActiveSides = false;
+		bool isRed = false;
+		bool activeReceving = true;
+		for (int d = 0; d < 4; d++) {
+			PowerPlacementPuzzle.Cell raycast = _puzzle.GridRaycast(pos, d);
+			if ((cell.Flags & (1 << d)) == 0) {
+				if (raycast != null && raycast.Type == PowerPlacementPuzzle.CellType.ENERGY) isRed = true;
+				continue;
+			}
+			hasActiveSides = true;
+			if (raycast != null && raycast.Type == PowerPlacementPuzzle.CellType.ENERGY) obj.Sides[d].material.color = Color.green;
+			else {
+				activeReceving = false;
+				obj.Sides[d].material.color = Color.white;
+			}
+		}
+		List<PowerPlacementPuzzle.Cell>[] raycasts = _puzzle.GetGridCrossLines(pos);
+		int[] counts = raycasts.SelectMany(line => new[] { PowerPlacementPuzzle.CellType.ENERGY, PowerPlacementPuzzle.CellType.SHIELD }.Select(type => (
+			line.Count(c => c.Type == type)
+		))).ToArray();
+		if (counts.Any(i => i > 1)) obj.Center.material.color = Color.red;
+		else obj.Center.material.color = counts.All(i => i == 1) ? Color.green : Color.white;
+		if (isRed) return obj.Outline.material.color = Color.red;
+		if (activeReceving) return obj.Outline.material.color = Color.green;
+		return obj.Outline.material.color = hasActiveSides ? Color.white : Color.green;
 	}
 
 	private Color SetShieldCellColor(Vector2Int pos) {
