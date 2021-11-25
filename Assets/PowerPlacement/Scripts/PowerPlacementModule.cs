@@ -108,9 +108,7 @@ public class PowerPlacementModule : ModuleScript {
 				if (objCell == null || objCell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
 				obj.Connections[d] = CreateConnection(pos, objCell.Position, (objCell.Flags & (1 << ((d + 2) % 4))) > 0 ? Color.green : Color.red);
 			}
-			return;
-		}
-		if (cell.Type == PowerPlacementPuzzle.CellType.ENERGY) {
+		} else if (cell.Type == PowerPlacementPuzzle.CellType.ENERGY) {
 			cell.Type = PowerPlacementPuzzle.CellType.SHIELD;
 			EnergyCellComponent energyCell = _objects[pos.x][pos.y] as EnergyCellComponent;
 			foreach (ConnectionComponent connection in energyCell.Connections.Where(c => c != null)) Destroy(connection.gameObject);
@@ -123,23 +121,22 @@ public class PowerPlacementModule : ModuleScript {
 			_objects[pos.x][pos.y] = obj;
 			UpdateColorsOnCross(pos);
 			OnObjectPlaced(pos);
-			return;
-		}
-		if (cell.Type == PowerPlacementPuzzle.CellType.SHIELD) {
-			cell.Type = PowerPlacementPuzzle.CellType.EMPTY;
-			Destroy((_objects[pos.x][pos.y] as ShieldComponent).gameObject);
-			_objects[pos.x][pos.y] = null;
-			UpdateColorsOnCross(pos);
-			PowerPlacementPuzzle.Cell[] raycasts = _puzzle.MultiGridRaycast(pos);
-			for (int d = 0; d < 4; d++) {
-				if (raycasts[d] == null || raycasts[d].Type != PowerPlacementPuzzle.CellType.ENERGY) continue;
-				int aD = (d + 2) % 4;
-				PowerPlacementPuzzle.Cell aObjCell = raycasts[aD];
-				if (aObjCell == null || aObjCell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
-				EnergyCellComponent ecObj = _objects[raycasts[d].Position.x][raycasts[d].Position.y] as EnergyCellComponent;
-				ecObj.Connections[aD] = CreateConnection(raycasts[d].Position, aObjCell.Position, (aObjCell.Flags & (1 << d)) > 0 ? Color.green : Color.red);
-			}
-			return;
+		} else if (cell.Type == PowerPlacementPuzzle.CellType.SHIELD) OnShieldPressed(pos, cell);
+	}
+
+	private void OnShieldPressed(Vector2Int pos, PowerPlacementPuzzle.Cell cell) {
+		cell.Type = PowerPlacementPuzzle.CellType.EMPTY;
+		Destroy((_objects[pos.x][pos.y] as ShieldComponent).gameObject);
+		_objects[pos.x][pos.y] = null;
+		UpdateColorsOnCross(pos);
+		PowerPlacementPuzzle.Cell[] raycasts = _puzzle.MultiGridRaycast(pos);
+		for (int d = 0; d < 4; d++) {
+			if (raycasts[d] == null || raycasts[d].Type != PowerPlacementPuzzle.CellType.ENERGY) continue;
+			int aD = (d + 2) % 4;
+			PowerPlacementPuzzle.Cell aObjCell = raycasts[aD];
+			if (aObjCell == null || aObjCell.Type != PowerPlacementPuzzle.CellType.RECEIVER) continue;
+			EnergyCellComponent ecObj = _objects[raycasts[d].Position.x][raycasts[d].Position.y] as EnergyCellComponent;
+			ecObj.Connections[aD] = CreateConnection(raycasts[d].Position, aObjCell.Position, (aObjCell.Flags & (1 << d)) > 0 ? Color.green : Color.red);
 		}
 	}
 
