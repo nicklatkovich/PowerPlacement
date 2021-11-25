@@ -11,6 +11,7 @@ public class PowerPlacementModule : ModuleScript {
 
 	public GameObject GridContainer;
 	public KMSelectable Selectable;
+	public KMSelectable ResetButton;
 	public CellComponent CellPrefab;
 	public CellBorderComponent CellBorderPrefab;
 	public ReceiverComponent ReceiverPrefab;
@@ -78,8 +79,14 @@ public class PowerPlacementModule : ModuleScript {
 				_cellGrid[x][z] = cell;
 			}
 		}
+		selectables.Add(ResetButton);
 		Selectable.Children = selectables.ToArray();
 		Selectable.UpdateChildren();
+	}
+
+	public override void OnActivate() {
+		base.OnActivate();
+		ResetButton.OnInteract += () => { OnResetPressed(); return false; };
 	}
 
 	private CellBorderComponent CreateCellBorder(float x, float z, float angle) {
@@ -122,6 +129,29 @@ public class PowerPlacementModule : ModuleScript {
 			UpdateColorsOnCross(pos);
 			OnObjectPlaced(pos);
 		} else if (cell.Type == PowerPlacementPuzzle.CellType.SHIELD) OnShieldPressed(pos, cell);
+	}
+
+	private void OnResetPressed() {
+		if (IsSolved) return;
+		List<Vector2Int> cellsToUpdateColor = new List<Vector2Int>();
+		for (int x = 0; x < PowerPlacementPuzzle.SIZE; x++) {
+			for (int y = 0; y < PowerPlacementPuzzle.SIZE; y++) {
+				PowerPlacementPuzzle.Cell cell = _puzzle.Grid[x][y];
+				if (cell.Type == PowerPlacementPuzzle.CellType.EMPTY) continue;
+				if (cell.Type == PowerPlacementPuzzle.CellType.RECEIVER) {
+					cellsToUpdateColor.Add(new Vector2Int(x, y));
+					continue;
+				}
+				if (cell.Type == PowerPlacementPuzzle.CellType.ENERGY) {
+					EnergyCellComponent obj = _objects[x][y] as EnergyCellComponent;
+					foreach (ConnectionComponent connection in obj.Connections.Where(conn => conn != null)) Destroy(connection.gameObject);
+					Destroy(obj.gameObject);
+				} else Destroy((_objects[x][y] as ShieldComponent).gameObject);
+				_objects[x][y] = null;
+				_puzzle.Grid[x][y].Type = PowerPlacementPuzzle.CellType.EMPTY;
+			}
+		}
+		foreach (Vector2Int pos in cellsToUpdateColor) UpdateColorOnCell(pos);
 	}
 
 	private void OnShieldPressed(Vector2Int pos, PowerPlacementPuzzle.Cell cell) {
